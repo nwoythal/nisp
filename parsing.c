@@ -45,13 +45,13 @@ int main(int argc, char** argv)
     mpc_parser_t* Lispy    = mpc_new("lispy");
     mpca_lang(MPCA_LANG_DEFAULT,
     "                                                     \
-        number   : /-?[0-9]+/;              \
+        number   : /-?[0-9]*\\.[0-9]+/ | /-?[0-9]+/;        \
         operator : '+' | '-' | '*' | '/' | '%' | /add/ | /sub/ | /mul/ | /div/ | /mod/; \
-        expr     : <number> | '(' <operator> <expr>+ ')'; \
-        lispy    : /^/ <operator> <expr>+ /$/;            \
+        expr     : <number> | '(' <expr>+ <operator> <expr>+')'; \
+        lispy    : /^/ <expr>+ <operator> <expr>+ /$/;            \
     ",
     Number, Operator, Expr, Lispy);
-    //| '/-?[0-9].[0-9]+/'
+ 
     puts("Nisp pre-alpha\nctrl+c to exit\n");
     while(TRUE)
     {
