@@ -5,7 +5,7 @@ if [ -e parsing ]; then
 fi
 
 if [ -e parsing.c ]; then
-    gcc -std=c99 -Wall parsing.c mpc/mpc.c -ledit -lm -o parsing 2>&1 #compile
+    gcc -std=c99 -Wall parsing.c mpc/mpc.c -ledit -lm -o parsing 2>&1 | grep -i error #compile
 else
     exit 20 #File not found
 fi

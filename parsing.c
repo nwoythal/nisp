@@ -35,6 +35,34 @@ void add_history(char * unused){} //Empty add_history function since windows
 
 #endif
 
+long eval_op(long x, char* op, long y)
+{
+    if(strcmp(op, "+")==0 || strcmp(op, "add")==0) {return x + y;}
+    if(strcmp(op, "-")==0 || strcmp(op, "sub")==0) {return x - y;}
+    if(strcmp(op, "*")==0 || strcmp(op, "mul")==0) {return x * y;}
+    if(strcmp(op, "/")==0 || strcmp(op, "div")==0) {return x / y;}
+    if(strcmp(op, "%")==0 || strcmp(op, "mod")==0) {return x % y;}
+    if(strcmp(op, "^")==0 || strcmp(op, "pow")==0) {return pow(x,y);}
+    return 0;
+}
+
+long eval(mpc_ast_t* t)
+{
+    if(strstr(t->tag, "number"))
+    {
+        return atof(t->contents);
+    }
+    char* op = t->children[1]->contents;
+    long x=eval(t->children[2]);
+    int i=3;
+    while(strstr(t->children[i]->tag, "expr"))
+    {
+        x=eval_op(x, op, eval(t->children[i]));
+        i++;
+    }
+    return x;
+}
+
 int main(int argc, char** argv)
 {
     
@@ -46,21 +74,25 @@ int main(int argc, char** argv)
     mpca_lang(MPCA_LANG_DEFAULT,
     "                                                     \
         number   : /-?[0-9]*\\.[0-9]+/ | /-?[0-9]+/;        \
-        operator : '+' | '-' | '*' | '/' | '%' | /add/ | /sub/ | /mul/ | /div/ | /mod/; \
-        expr     : <number> | '(' <expr>+ <operator> <expr>+')'; \
-        lispy    : /^/ <expr>+ <operator> <expr>+ /$/;            \
+        operator : '+' | '-' | '*' | '/' | '%' | '^' |\ 
+                   /add/ | /sub/ | /mul/ | /div/ | /mod/ | /pow/; \
+        expr     : <number> | '(' <operator> <expr>+')'; \
+        lispy    : /^/ <operator> <expr>+ /$/;            \
     ",
     Number, Operator, Expr, Lispy);
- 
+    /*for non polish notation: 
+    lispy    : /^/ <expr>+ <operator> <expr>+ /$/;\*/
     puts("Nisp pre-alpha\nctrl+c to exit\n");
     while(TRUE)
     {
         char * input=readline("> ");
         add_history(input); //Add to history buffer
+
         mpc_result_t r;
         if (mpc_parse("<stdin>", input, Lispy, &r))
         {
-            mpc_ast_print(r.output);
+            long result=eval(r.output);
+            printf("%li\n",result);
             mpc_ast_delete(r.output);
         }
         else
