@@ -3,7 +3,6 @@
 if [ -e parsing ]; then
    rm -f parsing #delete file if it exists
 fi
-
 if [ -e parsing.c ]; then
     gcc -std=c99 -Wall parsing.c mpc/mpc.c -ledit -lm -o parsing 2>&1 | grep -i error #compile
 else
