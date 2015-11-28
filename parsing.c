@@ -45,12 +45,12 @@ enum { LVAL_NUM, LVAL_ERR };
 typedef struct
 {
     int type;
-    long num;
+    double num;
     int err;
 } lval;
 
 //Number type creation
-lval lval_num(long x)
+lval lval_num(double x)
 {
     lval v;
     v.type = LVAL_NUM;
@@ -73,7 +73,7 @@ void lval_print(lval v)
     switch(v.type)
     {
         case LVAL_NUM: 
-            printf("%li\n", v.num);
+            printf("%.3f\n", v.num);
             break;
         case LVAL_ERR:
             if(v.err == LERR_DIVIDE_BY_ZERO)
@@ -94,7 +94,6 @@ void lval_print(lval v)
 
 lval eval_op(lval x, char* op, lval y)
 {
-
     //Error Checking
     if( x.type==LVAL_ERR ) { return x; }
     if( y.type==LVAL_ERR ) { return y; }
@@ -113,7 +112,7 @@ lval eval_op(lval x, char* op, lval y)
     {
         return y.num == 0 //check for div by zero
             ? lval_err(LERR_DIVIDE_BY_ZERO)
-            : lval_num(x.num % y.num);
+            : lval_num( (int) x.num % (int) y.num );
     }
     if(strcmp(op, "^")==0 || strcmp(op, "pow")==0) {return lval_num(pow(x.num,y.num));}
     return lval_err(LERR_BAD_OP);
@@ -121,10 +120,11 @@ lval eval_op(lval x, char* op, lval y)
 
 lval eval(mpc_ast_t* t)
 {
+    //If it is tagged as a number
     if(strstr(t->tag, "number"))
     {
         errno = 0;
-        long x=strtol(t->contents, NULL, 10);
+        double x=strtod(t->contents, NULL);
         return errno != ERANGE
             ? lval_num(x)
             : lval_err(LERR_BAD_NUM);
@@ -143,8 +143,7 @@ lval eval(mpc_ast_t* t)
 }
 
 int main(int argc, char** argv)
-{
-    
+{ 
     //Language & Grammar
     mpc_parser_t* Number   = mpc_new("number");
     mpc_parser_t* Operator = mpc_new("operator");
@@ -161,7 +160,7 @@ int main(int argc, char** argv)
     ",
     Number, Operator, Expr, Lispy);
     /*for non polish notation: 
-    lispy    : /^/ <expr>+ <operator> <expr>+ /$/;\*/
+    /^/ <expr>+ <operator> <expr>+ /$/;\*/
     puts("Nisp alpha\nctrl+c to exit\n");
     while(TRUE)
     {
