@@ -70,12 +70,13 @@ lval lval_err(int x)
 //Lisp value print
 void lval_print(lval v)
 {
+    //Depending on the type of the lisp value, we'll print...
     switch(v.type)
     {
-        case LVAL_NUM: 
+        case LVAL_NUM: //... the value or...
             printf("%.3f\n", v.num);
             break;
-        case LVAL_ERR:
+        case LVAL_ERR://... an error message.
             if(v.err == LERR_DIVIDE_BY_ZERO)
             {
                 printf("Divide by zero error!\n");
@@ -120,7 +121,7 @@ lval eval_op(lval x, char* op, lval y)
 
 lval eval(mpc_ast_t* t)
 {
-    //If it is tagged as a number
+    //If it is tagged as a number, return the number or an error
     if(strstr(t->tag, "number"))
     {
         errno = 0;
@@ -129,10 +130,12 @@ lval eval(mpc_ast_t* t)
             ? lval_num(x)
             : lval_err(LERR_BAD_NUM);
     }
-
+    
+    //The operator is the first value, and we recursively call eval on the second child
     char* op = t->children[1]->contents;
     lval x=eval(t->children[2]);
 
+    //check if the third child is an expression, if it is, we recursively call evalon it, and perform the operation on the result
     int i=3;
     while(strstr(t->children[i]->tag, "expr"))
     {
@@ -168,13 +171,13 @@ int main(int argc, char** argv)
         add_history(input); //Add to history buffer
 
         mpc_result_t r;
-        if (mpc_parse("<stdin>", input, Lispy, &r))
+        if (mpc_parse("<stdin>", input, Expr, &r) || mpc_parse("<stdin>", input, Lispy, &r)) //If the input matches the grammars provided, we will evaluate
         {
             lval result=eval(r.output);
             lval_print(result);
             mpc_ast_delete(r.output);
         }
-        else
+        else //otherwise, we throw an error
         {
             mpc_err_print(r.error);
             mpc_err_delete(r.error);
