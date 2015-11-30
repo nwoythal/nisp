@@ -98,7 +98,7 @@ lval eval_op(lval x, char* op, lval y)
     //Error Checking
     if( x.type==LVAL_ERR ) { return x; }
     if( y.type==LVAL_ERR ) { return y; }
-    
+    printf("%f, %f\n", x.num, y.num);    
     //Operation carryout
     if(strcmp(op, "+")==0 || strcmp(op, "add")==0) {return lval_num(x.num + y.num);}
     if(strcmp(op, "-")==0 || strcmp(op, "sub")==0) {return lval_num(x.num - y.num);}
@@ -155,7 +155,7 @@ int main(int argc, char** argv)
 
     mpca_lang(MPCA_LANG_DEFAULT,
     "                                                     \
-        number   : /-?[0-9]+/ | /-?[0-9]*\\.[0-9]+/;         \
+        number   : /-?[0-9]*\\.[0-9]+/ | /-?[0-9]+/ | ;         \
         operator : '+' | '-' | '*' | '/' | '%' | '^' |\ 
                    /add/ | /sub/ | /mul/ | /div/ | /mod/ | /pow/; \
         expr     : <number> | '(' <operator> <expr>+ ')'; \
