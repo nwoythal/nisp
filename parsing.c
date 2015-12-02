@@ -35,112 +35,303 @@ void add_history(char * unused){} //Empty add_history function since windows
 
 #endif
 
-//Lisp error types
-enum { LERR_DIVIDE_BY_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
-
 //Possible Lisp types
-enum { LVAL_NUM, LVAL_ERR };
+enum { LVAL_NUM, LVAL_ERR, LVAL_SYM, LVAL_SEXPR };
 
 //Lisp value
-typedef struct
+typedef struct lval
 {
     int type;
     double num;
-    int err;
+    char* err;
+    char* sym;
+    int count;
+    struct lval** cell;
 } lval;
 
+//Prototypes
+void lval_print(lval* v);
+lval* lval_eval(lval* v);
+
 //Number type creation
-lval lval_num(double x)
+lval* lval_num(double x)
 {
-    lval v;
-    v.type = LVAL_NUM;
-    v.num = x;
+    lval* v=malloc(sizeof(lval));
+    v->type = LVAL_NUM;
+    v->num = x;
     return v;
 }
 
 //Error type creation
-lval lval_err(int x)
+lval* lval_err(char* m)
 {
-    lval v;
-    v.type=LVAL_ERR;
-    v.err=x;
+    lval* v=malloc(sizeof(lval));
+    v->type=LVAL_ERR;
+    v->err=malloc(strlen(m)+1);
+    strcpy(v->err, m);
     return v;
 }
 
+//Symbol type creation
+lval* lval_sym(char* s)
+{
+    lval* v=malloc(sizeof(lval));
+    v->type=LVAL_SYM;
+    v->sym=malloc(strlen(s)+1);
+    strcpy(v->sym,s);
+    return v;
+}
+
+//S-Expression creation
+lval* lval_sexpr(void)
+{
+    lval* v=malloc(sizeof(lval));
+    v->type=LVAL_SEXPR;
+    v->count=0;
+    v->cell=NULL;
+    return v;
+}
+
+//delete lval
+void lval_del(lval* v)
+{
+    switch(v->type)
+    {
+        case LVAL_NUM:
+            break;
+        case LVAL_ERR:
+            free(v->err); //free allocated string
+            break;
+        case LVAL_SYM:
+            free(v->sym); //free allocated string
+            break;
+        //recurse over expression to free allocated memory
+        case LVAL_SEXPR:
+            for(int i=0; i<v->count; i++)
+            {
+                lval_del(v->cell[i]);
+            }
+            free(v->cell);
+            break;
+    }
+    free(v);
+}
+
+//Add element to list
+lval* lval_add(lval* v, lval* x)
+{
+    v->count++;
+    v->cell=realloc(v->cell, sizeof(lval*) * v->count);
+    v->cell[v->count-1]=x;
+    return v;
+}
+
+//Pop lval at location from list
+lval* lval_pop(lval* v, int i)
+{
+    //Grab item at index i
+    lval* x=v->cell[i];
+    
+    //Move list head, change item count, & reallocate
+    memmove(&v->cell[i], &v->cell[i+1], sizeof(lval*) * (v->count-i-1));
+    v->count--;
+    v->cell=realloc(v->cell, sizeof(lval*) * v->count);
+    return x;
+}
+
+lval* lval_take(lval* v, int i)
+{
+    lval* x=lval_pop(v,i);
+    lval_del(v);
+    return x;
+}
+
+void lval_expr_print(lval* v, char open, char close)
+{
+    putchar(open);
+    for(int i=0; i<v->count; i++)
+    {
+        lval_print(v->cell[i]);
+        if(i!=(v->count-1))
+        {
+            putchar(' ');
+        }
+    }
+    putchar(close);
+}
+
 //Lisp value print
-void lval_print(lval v)
+void lval_print(lval* v)
 {
-    //Depending on the type of the lisp value, we'll print...
-    switch(v.type)
+    switch(v->type)
     {
-        case LVAL_NUM: //... the value or...
-            printf("%.3f\n", v.num);
+        case LVAL_NUM:
+            printf("%.3f",v->num);
             break;
-        case LVAL_ERR://... an error message.
-            if(v.err == LERR_DIVIDE_BY_ZERO)
-            {
-                printf("Divide by zero error!\n");
-            }
-            if(v.err == LERR_BAD_OP)
-            {
-                printf("Invalid operation!\n");
-            }
-            if(v.err == LERR_BAD_NUM)
-            {
-                printf("Number not recognized!\n");
-            }
+        case LVAL_ERR:
+            printf("Error: %s",v->err);
+            break;
+        case LVAL_SYM:
+            printf("%s",v->sym);
+            break;
+        case LVAL_SEXPR:
+            lval_expr_print(v, '(', ')');
             break;
     }
 }
 
-lval eval_op(lval x, char* op, lval y)
+void lval_println(lval* v)
 {
-    //Error Checking
-    if( x.type==LVAL_ERR ) { return x; }
-    if( y.type==LVAL_ERR ) { return y; }
-    printf("%f, %f\n", x.num, y.num);    
-    //Operation carryout
-    if(strcmp(op, "+")==0 || strcmp(op, "add")==0) {return lval_num(x.num + y.num);}
-    if(strcmp(op, "-")==0 || strcmp(op, "sub")==0) {return lval_num(x.num - y.num);}
-    if(strcmp(op, "*")==0 || strcmp(op, "mul")==0) {return lval_num(x.num * y.num);}
-    if(strcmp(op, "/")==0 || strcmp(op, "div")==0) 
-    {
-        return y.num == 0 //check for div by zero
-            ? lval_err(LERR_DIVIDE_BY_ZERO)
-            : lval_num(x.num / y.num);
-    }
-    if(strcmp(op, "%")==0 || strcmp(op, "mod")==0) 
-    {
-        return y.num == 0 //check for div by zero
-            ? lval_err(LERR_DIVIDE_BY_ZERO)
-            : lval_num( (int) x.num % (int) y.num );
-    }
-    if(strcmp(op, "^")==0 || strcmp(op, "pow")==0) {return lval_num(pow(x.num,y.num));}
-    return lval_err(LERR_BAD_OP);
+    lval_print(v);
+    putchar('\n');
 }
 
-lval eval(mpc_ast_t* t)
+lval* builtin_op(lval* a, char* op)
 {
-    //If it is tagged as a number, return the number or an error
-    if(strstr(t->tag, "number"))
+    //Input validation
+    for(int i=0;i<a->count;i++)
     {
-        errno = 0;
-        double x=strtod(t->contents, NULL);
-        return errno != ERANGE
-            ? lval_num(x)
-            : lval_err(LERR_BAD_NUM);
+        if(a->cell[i]->type != LVAL_NUM)
+        {
+            lval_del(a);
+            return lval_err("Input is non-numerical!");
+        }
     }
     
-    //The operator is the first value, and we recursively call eval on the second child
-    char* op = t->children[1]->contents;
-    lval x=eval(t->children[2]);
+    lval* x=lval_pop(a,0);
 
-    //check if the third child is an expression, if it is, we recursively call evalon it, and perform the operation on the result
-    int i=3;
-    while(strstr(t->children[i]->tag, "expr"))
+    if((strcmp(op,"-")==0 && a->count==0))
     {
-        x=eval_op(x, op, eval(t->children[i]));
-        i++;
+        x->num = -x->num;
+    }
+    
+    while(a->count > 0)
+    {
+        //get second value
+        lval* y=lval_pop(a,0);
+
+        //Operation carryout
+        if(strcmp(op, "+")==0 || strcmp(op, "add")==0) {x->num += y->num;}
+        if(strcmp(op, "-")==0 || strcmp(op, "sub")==0) {x->num -= y->num;}
+        if(strcmp(op, "*")==0 || strcmp(op, "mul")==0) {x->num *= y->num;}
+        if(strcmp(op, "^")==0 || strcmp(op, "pow")==0) {x->num=pow(x->num,y->num);}
+        if(strcmp(op, "/")==0 || strcmp(op, "div")==0) 
+        {
+            if(y->num==0)
+            {
+                lval_del(x);
+                lval_del(y);
+                x=lval_err("Divide by zero error!");
+                break;
+            }
+            x->num/=y->num;
+        }
+        if(strcmp(op, "%")==0 || strcmp(op, "mod")==0) 
+        { 
+            if(y->num==0)
+            {
+                lval_del(x);
+                lval_del(y);
+                x=lval_err("Divide by zero error!");
+                break;
+            }
+            x->num=(double) ((int) x->num % (int) y->num);
+        }
+        lval_del(y);
+    }
+    lval_del(a);
+    return x;
+}
+
+lval* lval_eval_sexpr(lval* v)
+{
+    //Recurse down S-Expression
+    for(int i=0;i<v->count;i++)
+    {
+        v->cell[i]=lval_eval(v->cell[i]);
+    }
+
+    for(int i=0;i<v->count;i++)
+    {
+        if(v->cell[i]->type==LVAL_ERR)
+        {
+            return lval_take(v,i);
+        }
+    }
+
+    //Empty SExpr
+    if(v->count==0)
+    {
+        return v;
+    }
+
+    //Single SExpr
+    if(v->count==1)
+    {
+        return lval_take(v,0);
+    }
+
+    lval* f=lval_pop(v,0);
+    if(f->type != LVAL_SYM)
+    {
+        lval_del(f);
+        lval_del(v);
+        return lval_err("S-Expression has incorrect syntax.");
+    }
+
+    lval* result=builtin_op(v, f->sym);
+    lval_del(f);
+    return result;
+}
+
+lval* lval_eval(lval* v)
+{
+    if(v->type==LVAL_SEXPR)
+    {
+        return lval_eval_sexpr(v);
+    }
+    return v;
+}
+
+lval* lval_read_num(mpc_ast_t* t)
+{
+    errno=0;
+    double x=strtod(t->contents, NULL);
+    return errno!=ERANGE
+        ? lval_num(x)
+        : lval_err("Invalid number.");
+}
+
+lval* lval_read(mpc_ast_t* t)
+{
+    if(strstr(t->tag, "number"))
+    {
+        return lval_read_num(t);
+    }
+    if(strstr(t->tag, "symbol"))
+    {
+        return lval_sym(t->contents);
+    }
+    
+    lval* x=NULL;
+    if(strcmp(t->tag, ">")==0)
+    {
+        x=lval_sexpr();
+    }
+    if(strstr(t->tag, "sexpr"))
+    {
+        x=lval_sexpr();
+    }
+    for(int i=0; i<t->children_num; i++)
+    {
+        if(strcmp(t->children[i]->contents, "(")==0) {continue;}
+        if(strcmp(t->children[i]->contents, ")")==0) {continue;}
+        if(strcmp(t->children[i]->contents, "{")==0) {continue;}
+        if(strcmp(t->children[i]->contents, "}")==0) {continue;}
+        if(strcmp(t->children[i]->contents, "[")==0) {continue;}
+        if(strcmp(t->children[i]->contents, "]")==0) {continue;}
+        if(strcmp(t->children[i]->tag,  "regex")==0) {continue;}
+        x=lval_add(x, lval_read(t->children[i]));
     }
     return x;
 }
@@ -148,33 +339,34 @@ lval eval(mpc_ast_t* t)
 int main(int argc, char** argv)
 { 
     //Language & Grammar
-    mpc_parser_t* Number   = mpc_new("number");
-    mpc_parser_t* Operator = mpc_new("operator");
-    mpc_parser_t* Expr     = mpc_new("expr");
-    mpc_parser_t* Lispy    = mpc_new("lispy");
+    mpc_parser_t* Number = mpc_new("number");
+    mpc_parser_t* Symbol = mpc_new("symbol");
+    mpc_parser_t* Sexpr  = mpc_new("sexpr");
+    mpc_parser_t* Expr   = mpc_new("expr");
+    mpc_parser_t* Lispy  = mpc_new("lispy");
 
     mpca_lang(MPCA_LANG_DEFAULT,
-    "                                                     \
-        number   : /-?[0-9]*\\.[0-9]+/ | /-?[0-9]+/ | ;         \
-        operator : '+' | '-' | '*' | '/' | '%' | '^' |\ 
-                   /add/ | /sub/ | /mul/ | /div/ | /mod/ | /pow/; \
-        expr     : <number> | '(' <operator> <expr>+ ')'; \
-        lispy    : /^/ <operator> <expr>+ /$/;            \
+    "                                                            \
+        number : /-?[0-9]*\\.[0-9]+/ | /-?[0-9]+/;               \
+        symbol : '+' | '-' | '*' | '/' | '%' | '^' |             \ 
+                   /add/ | /sub/ | /mul/ | /div/ | /mod/ | /pow/;\
+        sexpr  : '(' <expr>* ')';                                \
+        expr   : <number> | <symbol> | <sexpr>;                  \
+        lispy  : /^/ <expr>* /$/;                                \
     ",
-    Number, Operator, Expr, Lispy);
-    /*for non polish notation: 
-    /^/ <expr>+ <operator> <expr>+ /$/;\*/
+    Number, Symbol, Sexpr, Expr, Lispy);
     puts("Nisp alpha\nctrl+c to exit\n");
     while(TRUE)
     {
-        char * input=readline("> ");
+        char * input=readline(">");
         add_history(input); //Add to history buffer
 
         mpc_result_t r;
-        if (mpc_parse("<stdin>", input, Expr, &r) || mpc_parse("<stdin>", input, Lispy, &r)) //If the input matches the grammars provided, we will evaluate
+        if (mpc_parse("<stdin>", input, Lispy, &r)) //If the input matches the grammars provided, we will evaluate
         {
-            lval result=eval(r.output);
-            lval_print(result);
+            lval* x=lval_eval(lval_read(r.output));
+            lval_println(x);
+            lval_del(x);
             mpc_ast_delete(r.output);
         }
         else //otherwise, we throw an error
@@ -184,6 +376,6 @@ int main(int argc, char** argv)
         }
         free(input); //de-allocate
     }
-    mpc_cleanup(4,Number,Operator,Expr,Lispy);
+    mpc_cleanup(5, Number, Symbol, Sexpr, Expr, Lispy);
     return 0;
 }
