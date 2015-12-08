@@ -13,7 +13,8 @@ if [ ! -e mpc/mpc.h ]; then
 fi
 
 if [ "$install" == y ]; then
-    git clone https://github.com/orangeduck/mpc.git 2>/dev/null 
+    git clone https://github.com/orangeduck/mpc.git 2>/dev/null
+    echo 'Finished install.' 
 elif [ "$install" == n ]; then
     exit 30 #user selected no
 fi
@@ -23,6 +24,7 @@ if [ -e nisp ]; then
 fi
 
 if [ -e nisp.c ]; then
+    echo 'Compiling...'
     gcc -std=c99 -Wall nisp.c mpc/mpc.c -ledit -lm -g -o nisp 2>&1 | grep -i error #compile 
     echo "Compiled successfuly! Type './nisp' to run!"
 else
