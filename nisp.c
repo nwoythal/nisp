@@ -389,7 +389,9 @@ void lval_print(lval* v)
     switch(v->type)
     {
         case LVAL_NUM:
-            printf("%.3f",v->num);
+            (v->num-round(v->num)!=0)
+                ? printf("%.3f",v->num)
+                : printf("%d", (int) v->num);
             break;
         case LVAL_ERR:
             printf("Error: %s",v->err);
