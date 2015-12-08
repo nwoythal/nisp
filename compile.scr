@@ -1,11 +1,32 @@
 #!/bin/bash
 
-if [ -e parsing ]; then
-   rm -f parsing #delete file if it exists
+if [ ! -e mpc/mpc.h ]; then
+    if  hash git 2>/dev/null; then
+        while [ "$install" != 'y' -a "$install" != 'n' ]; do
+            echo "MPC folder is empty! Do you want to install it? [y/n]"
+            read install
+        done
+    else
+        echo "MPC not found and could not install! Please install git and re-run the script."
+        exit 20 #file not found
+    fi
 fi
-if [ -e parsing.c ]; then
-    gcc -std=c99 -Wall parsing.c mpc/mpc.c -ledit -lm -g -o parsing 2>&1 | grep -i error #compile 
+
+if [ "$install" == y ]; then
+    git clone https://github.com/orangeduck/mpc.git 2>/dev/null 
+else
+    exit 30 #user selected no
+fi
+
+if [ -e nisp ]; then
+   rm -f nisp #delete file if it exists
+fi
+
+if [ -e nisp.c ]; then
+    gcc -std=c99 -Wall nisp.c mpc/mpc.c -ledit -lm -g -o nisp 2>&1 | grep -i error #compile 
+    echo "Compiled successfuly! Type './nisp' to run!"
 else
     exit 20 #File not found
 fi
 
+exit 10
