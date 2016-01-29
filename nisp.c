@@ -52,12 +52,22 @@ void add_history(char * unused){} //Empty add_history function since windows
 
 #endif
 
+//Parser Declarations
+
+    mpc_parser_t* Number;
+    mpc_parser_t* Symbol;
+    mpc_parser_t* String;
+    mpc_parser_t* Comment;
+    mpc_parser_t* Sexpr;
+    mpc_parser_t* Qexpr;
+    mpc_parser_t* Expr;
+    mpc_parser_t* Lispy;
+
 //Structs, typedefs, and enumerations
 struct lval;
 struct lenv;
 typedef struct lval lval;
 typedef struct lenv lenv;
-int loop=TRUE;
 
 //Possible Lisp types
 enum { LVAL_ERR, LVAL_FUN, LVAL_NUM, LVAL_QEXPR, LVAL_SEXPR, LVAL_STR, LVAL_SYM };
@@ -105,6 +115,10 @@ char* ltype_name(int t)
 
 //Prototypes
 void lval_print(lval* v);
+void lval_del(lval* v);
+void lval_println(lval* v);
+void lval_print_str(lval* v);
+int lval_eq(lval* x, lval* y);
 lval* lval_eval(lenv* e, lval* v);
 lval* lval_copy(lval* v);
 lval* lval_call(lenv* e, lval* f, lval* a);
@@ -116,6 +130,7 @@ lval* lval_err(char* fmt, ...);
 lval* lval_sexpr(void);
 lval* lval_join(lval* x, lval* y);
 lval* lval_str(char* s);
+lval* lval_read(mpc_ast_t* t);
 
 //Constructors
 //Lisp Environment constructor
@@ -420,6 +435,60 @@ lval* builtin_var(lenv* e, lval* a, char* func)
     return lval_sexpr();
 }
 
+lval* builtin_load(lenv* e, lval* a)
+{
+    LASSERT_NUM("load", a, 1);
+    LASSERT_TYPE("load", a, 0, LVAL_STR);
+    mpc_result_t r;
+    if(mpc_parse_contents(a->cell[0]->str, Lispy, &r))
+    {
+        lval* expr=lval_read(r.output);
+        mpc_ast_delete(r.output);
+        while(expr->count)
+        {
+            lval* x=lval_eval(e,lval_pop(expr, 0));
+            if(x->type==LVAL_ERR)
+            {
+                lval_println(x);
+            }
+            lval_del(x);
+        }
+        lval_del(expr);
+        lval_del(a);
+        return lval_sexpr();
+    }
+    else
+    {
+        char* err_msg=mpc_err_string(r.error);
+        mpc_err_delete(r.error);
+        lval* err=lval_err("Could not load library %s", err_msg);
+        free(err_msg);
+        lval_del(a);
+        return err;
+    }
+}
+
+lval* builtin_print(lenv* e, lval* a)
+{
+    for(int i=0; i<a->count; i++)
+    {
+        lval_print(a->cell[i]);
+        putchar(' ');
+    }
+    putchar('\n');
+    lval_del(a);
+    return lval_sexpr();
+}
+
+lval* builtin_error(lenv* e, lval* a)
+{
+    LASSERT_NUM("error", a, 1);
+    LASSERT_TYPE("error", a, 0, LVAL_STR);
+    lval* err=lval_err(a->cell[0]->str);
+    lval_del(a);
+    return err;
+}
+
 //Get head of list
 lval* builtin_head(lenv* e, lval* a)
 {
@@ -434,13 +503,6 @@ lval* builtin_head(lenv* e, lval* a)
         lval_del(lval_pop(v, 1));
     }
     return v;
-}
-
-//Must fix this trash
-void builtin_quit(lenv* e, lval* a)
-{
-    LASSERT_NUM("quit", a, 0);
-    loop=FALSE;
 }
 
 //Get tail of list
@@ -794,7 +856,7 @@ lval* lval_str(char* s)
 {
     lval* v=malloc(sizeof(lval));
     v->type=LVAL_STR;
-    v->sym=malloc(strlen(s)+1);
+    v->str=malloc(strlen(s)+1);
     strcpy(v->str, s);
     return v;
 }
@@ -910,7 +972,6 @@ lval* lval_read(mpc_ast_t* t)
     {
         return lval_sym(t->contents);
     }
-    
     lval* x=NULL;
     if(strcmp(t->tag, ">")==0)
     {
@@ -928,10 +989,6 @@ lval* lval_read(mpc_ast_t* t)
     {
         return lval_read_str(t);
     }
-    if(strstr(t->children[i]->tag, "comment"))
-    {
-        continue;
-    }
     for(int i=0; i<t->children_num; i++)
     {
         if(strcmp(t->children[i]->contents, "(")==0) {continue;}
@@ -941,6 +998,7 @@ lval* lval_read(mpc_ast_t* t)
         if(strcmp(t->children[i]->contents, "[")==0) {continue;}
         if(strcmp(t->children[i]->contents, "]")==0) {continue;}
         if(strcmp(t->children[i]->tag,  "regex")==0) {continue;}
+        if(strstr(t->children[i]->tag, "comment")) {continue;}
         x=lval_add(x, lval_read(t->children[i]));
     }
     return x;
@@ -1030,6 +1088,11 @@ void lenv_add_builtin(lenv* e, char* name, lbuiltin func)
 
 void lenv_add_builtins(lenv* e)
 {
+    //Library support
+    lenv_add_builtin(e, "load", builtin_load);
+    lenv_add_builtin(e, "error", builtin_error);
+    lenv_add_builtin(e, "print", builtin_print);
+
     //Var declaration
     lenv_add_builtin(e, "def", builtin_def);
 
@@ -1071,16 +1134,16 @@ void lenv_add_builtins(lenv* e)
 }
 
 int main(int argc, char** argv)
-{ 
+{
+    Number  = mpc_new("number"); 
+    Symbol  = mpc_new("symbol"); 
+    String  = mpc_new("string"); 
+    Comment = mpc_new("comment"); 
+    Sexpr   = mpc_new("sexpr"); 
+    Qexpr   = mpc_new("qexpr"); 
+    Expr    = mpc_new("expr"); 
+    Lispy   = mpc_new("lispy"); 
     //Language & Grammar
-    mpc_parser_t* Number = mpc_new("number");
-    mpc_parser_t* Symbol = mpc_new("symbol");
-    mpc_parser_t* Sexpr  = mpc_new("sexpr");
-    mpc_parser_t* Qexpr  = mpc_new("qexpr");
-    mpc_parser_t* Expr   = mpc_new("expr");
-    mpc_parser_t* Lispy  = mpc_new("lispy");
-    mpc_parser_t* String  = mpc_new("string");
-
     mpca_lang(MPCA_LANG_DEFAULT,
     "                                                      \
         number  : /-?[0-9]*\\.[0-9]+/ | /-?[0-9]+/;        \
@@ -1089,33 +1152,49 @@ int main(int argc, char** argv)
         comment : /;[^\\r\\n]*/;                           \
         sexpr   : '(' <expr>* ')';                         \
         qexpr   : '{' <expr>* '}';                         \
-        expr    : <number> | <symbol> | <sexpr> |          \
-                  <comment> | <qexpr> | <string>           \
+        expr    : <number> | <symbol> | <sexpr>            \
+                  | <comment> | <qexpr> | <string>;        \
         lispy   : /^/ <expr>* /$/;                         \
     ",
-    Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
-    puts("Nisp alpha\nctrl+c to exit\n");
+    Number, Symbol, String, Comment, Sexpr, Qexpr, Expr, Lispy);
     lenv* e=lenv_new();
     lenv_add_builtins(e);
-    while(loop)
+    if(argc==1)
     {
-        char * input=readline(">");
-        add_history(input); //Add to history buffer
+        puts("Nisp alpha\nctrl+c to exit\n");
+        while(TRUE)
+        {
+            char * input=readline(">");
+            add_history(input); //Add to history buffer
 
-        mpc_result_t r;
-        if (mpc_parse("<stdin>", input, Lispy, &r)) //If the input matches the grammars provided, we will evaluate
+            mpc_result_t r;
+            if (mpc_parse("<stdin>", input, Lispy, &r)) //If the input matches the grammars provided, we will evaluate
+            {
+                lval* x=lval_eval(e, lval_read(r.output));
+                lval_println(x);
+                lval_del(x);
+                mpc_ast_delete(r.output);
+            }
+            else //otherwise, we throw an error
+            {
+                mpc_err_print(r.error);
+                mpc_err_delete(r.error);
+            }
+            free(input); //de-allocate
+        }
+    }
+    if(argc>=2)
+    {
+        for(int i=1; i<argc; i++)
         {
-            lval* x=lval_eval(e, lval_read(r.output));
-            lval_println(x);
+            lval* args=lval_add(lval_sexpr(), lval_str(argv[i]));
+            lval* x=builtin_load(e, args);
+            if(x->type==LVAL_ERR)
+            {
+                lval_println(x);
+            }
             lval_del(x);
-            mpc_ast_delete(r.output);
         }
-        else //otherwise, we throw an error
-        {
-            mpc_err_print(r.error);
-            mpc_err_delete(r.error);
-        }
-        free(input); //de-allocate
     }
     lenv_del(e);
     mpc_cleanup(8, Number, Symbol, Sexpr, Qexpr, Expr, Lispy, String, Comment);
