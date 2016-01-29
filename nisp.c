@@ -60,7 +60,7 @@ typedef struct lenv lenv;
 int loop=TRUE;
 
 //Possible Lisp types
-enum { LVAL_NUM, LVAL_ERR, LVAL_SYM, LVAL_SEXPR, LVAL_QEXPR, LVAL_FUN};
+enum { LVAL_ERR, LVAL_FUN, LVAL_NUM, LVAL_QEXPR, LVAL_SEXPR, LVAL_STR, LVAL_SYM };
 
 typedef lval*(*lbuiltin)(lenv*, lval*);
 
@@ -71,6 +71,7 @@ struct lval
     double num;
     char* err;
     char* sym;
+    char* str;
     lbuiltin builtin;
     lenv* env;
     lval* formals;
@@ -97,6 +98,7 @@ char* ltype_name(int t)
         case LVAL_SYM: return "Symbol";
         case LVAL_SEXPR: return "S-Expression";
         case LVAL_QEXPR: return "Q-Expression";
+        case LVAL_STR: return "String";
         default: return "Unknown";
     }
 }
@@ -113,6 +115,7 @@ lval* builtin_var(lenv* e, lval* a, char* func);
 lval* lval_err(char* fmt, ...);
 lval* lval_sexpr(void);
 lval* lval_join(lval* x, lval* y);
+lval* lval_str(char* s);
 
 //Constructors
 //Lisp Environment constructor
@@ -572,7 +575,30 @@ void lval_print(lval* v)
                 putchar(')');
             }
             break;
+        case LVAL_STR:
+            lval_print_str(v);
+            break;
     }
+}
+
+lval* lval_read_str(mpc_ast_t* t)
+{
+    t->contents[strlen(t->contents)-1]='\0';
+    char* unescaped=malloc(strlen(t->contents+1)+1);
+    strcpy(unescaped, t->contents+1);
+    unescaped=mpcf_unescape(unescaped);
+    lval* str=lval_str(unescaped);
+    free(unescaped);
+    return str;
+}
+
+void lval_print_str(lval* v)
+{
+    char* escaped=malloc(strlen(v->str)+1);
+    strcpy(escaped, v->str);
+    escaped=mpcf_escape(escaped);
+    printf("\"%s\"", escaped);
+    free(escaped);
 }
 
 void lval_println(lval* v)
@@ -619,7 +645,9 @@ int lval_eq(lval* x, lval* y)
                 }
             }
             return 1;
-         break;
+            break;
+        case LVAL_STR:
+            return (strcmp(x->str, y->str)==0);
     }
     return 0;
 }
@@ -663,6 +691,10 @@ lval* lval_copy(lval* v)
                 x->cell[i]=lval_copy(v->cell[i]);
             }
             break;
+        case LVAL_STR:
+            x->str=malloc(strlen(v->str)+1);
+            strcpy(x->str, v->str);
+            break;
     }
     return x;
 }
@@ -696,7 +728,10 @@ void lval_del(lval* v)
                 lval_del(v->formals);
                 lval_del(v->body);
             }
-           break;
+            break;
+        case LVAL_STR:
+            free(v->str);
+            break;
     }
     free(v);
 }
@@ -750,7 +785,17 @@ lval* lval_sym(char* s)
     lval* v=malloc(sizeof(lval));
     v->type=LVAL_SYM;
     v->sym=malloc(strlen(s)+1);
-    strcpy(v->sym,s);
+    strcpy(v->sym, s);
+    return v;
+}
+
+//String type creation
+lval* lval_str(char* s)
+{
+    lval* v=malloc(sizeof(lval));
+    v->type=LVAL_STR;
+    v->sym=malloc(strlen(s)+1);
+    strcpy(v->str, s);
     return v;
 }
 
@@ -878,6 +923,14 @@ lval* lval_read(mpc_ast_t* t)
     if(strstr(t->tag, "qexpr"))
     {
         x=lval_qexpr();
+    }
+    if(strstr(t->tag, "string"))
+    {
+        return lval_read_str(t);
+    }
+    if(strstr(t->children[i]->tag, "comment"))
+    {
+        continue;
     }
     for(int i=0; i<t->children_num; i++)
     {
@@ -1026,15 +1079,19 @@ int main(int argc, char** argv)
     mpc_parser_t* Qexpr  = mpc_new("qexpr");
     mpc_parser_t* Expr   = mpc_new("expr");
     mpc_parser_t* Lispy  = mpc_new("lispy");
+    mpc_parser_t* String  = mpc_new("string");
 
     mpca_lang(MPCA_LANG_DEFAULT,
-    "                                                        \
-        number : /-?[0-9]*\\.[0-9]+/ | /-?[0-9]+/;           \
-        symbol : /[a-zA-Z0-9_+\\-*\\/\\\\=><!&\\^%]+/;           \ 
-        sexpr  : '(' <expr>* ')';                            \
-        qexpr  : '{' <expr>* '}';                            \
-        expr   : <number> | <symbol> | <sexpr> | <qexpr>;    \
-        lispy  : /^/ <expr>* /$/;                            \
+    "                                                      \
+        number  : /-?[0-9]*\\.[0-9]+/ | /-?[0-9]+/;        \
+        symbol  : /[a-zA-Z0-9_+\\-*\\/\\\\=><!&\\^%]+/;    \
+        string  : /\"(\\\\.|[^\"])*\"/;                    \
+        comment : /;[^\\r\\n]*/;                           \
+        sexpr   : '(' <expr>* ')';                         \
+        qexpr   : '{' <expr>* '}';                         \
+        expr    : <number> | <symbol> | <sexpr> |          \
+                  <comment> | <qexpr> | <string>           \
+        lispy   : /^/ <expr>* /$/;                         \
     ",
     Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
     puts("Nisp alpha\nctrl+c to exit\n");
@@ -1061,6 +1118,6 @@ int main(int argc, char** argv)
         free(input); //de-allocate
     }
     lenv_del(e);
-    mpc_cleanup(6, Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
+    mpc_cleanup(8, Number, Symbol, Sexpr, Qexpr, Expr, Lispy, String, Comment);
     return 0;
 }
