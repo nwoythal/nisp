@@ -25,7 +25,7 @@ fi
 
 if [ -e nisp.c ]; then
     echo 'Compiling...'
-    gcc -std=c99 -Wall nisp.c mpc/mpc.c -ledit -lm -g -o nisp #2>&1 | grep -i error #compile, and ignore warnings 
+    gcc -std=c99 -Wall nisp.c mpc/mpc.c -ledit -lm -g -o nisp 2>&1 | grep -i error #compile, and ignore warnings 
 else
     exit 20 #File not found
 fi
