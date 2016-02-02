@@ -1,0 +1,61 @@
+;Atomic Values
+(def {nil} {})
+(def {true} {1})
+(def {false} {0})
+
+;Function Definition
+(def {fun} (\ {f b} {
+  def (head f) (\ (tail f) b)
+}))
+
+;Packing and unpacking
+(fun {unpack f l} {
+  eval (join (list f) l)
+})
+
+(fun {pack f & xs} {f xs})
+
+(def {curry} unpack)
+(def {uncurry} pack)
+
+;Sequential operation carryout
+(fun {do & l} {
+  if (== l nil)
+    {nil}
+    {last l}
+})
+
+;Scope definition
+(fun {let b} {
+  ((\ {_} b) ())
+})
+
+;Logical functions
+;These only work on binary values
+(fun {not x} {- 1 x})
+(fun {or x y} {+ x y})
+(fun {and x y} {* x y})
+
+;Misc. functions
+(fun {flip f a b} {f b a})
+(fun {ghost & xs} {eval xs})
+(fun {comp f g x} {f (g x)})
+
+;List operations
+(fun {first l} {eval (head l)})
+(fun {second l} {eval (head (tail l))})
+(fun {third l} {eval (head (tail (tail l)))})
+(fun {nth i l}{
+  if (== i 0)
+    {first l}
+    {nth (- n 1) (tail l)}
+})
+(fun {last l} {nth (- (len l) 1) l})
+(fun {last l} {nth (- (len l) 1) l})
+
+;List Length
+(fun {len l} {
+  if (== l nil)
+    {0}
+    {+ 1 (len (tail l))}
+})
