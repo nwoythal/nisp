@@ -51,7 +51,6 @@
     {nth (- n 1) (tail l)}
 })
 (fun {last l} {nth (- (len l) 1) l})
-(fun {last l} {nth (- (len l) 1) l})
 
 ;List Length
 (fun {len l} {
